@@ -1,0 +1,33 @@
+{
+	"name": "changesets-starter",
+	"version": "1.0.0",
+	"private": true,
+	"description": "One-shot scaffold for Changesets: single-package or npm workspaces, with optional version sync hooks.",
+	"type": "module",
+	"bin": {
+		"create-changesets": "./bin/init.mjs"
+	},
+	"scripts": {
+		"init": "node ./bin/init.mjs"
+	},
+	"engines": {
+		"node": ">=18"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/simom/changesets-starter.git"
+	},
+	"keywords": [
+		"changesets",
+		"semver",
+		"changelog",
+		"monorepo",
+		"workspaces"
+	],
+	"author": "Simone Maranzana",
+	"license": "MIT",
+	"bugs": {
+		"url": "https://github.com/simom/changesets-starter/issues"
+	},
+	"homepage": "https://github.com/simom/changesets-starter#readme"
+}

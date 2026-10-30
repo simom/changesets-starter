@@ -1,0 +1,9 @@
+{
+	"sync": {
+		"strategy": "json-field",
+		"jsonField": {
+			"file": "config/settings.json",
+			"field": "app_version"
+		}
+	}
+}

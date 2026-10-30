@@ -1,0 +1,10 @@
+{
+	"sync": {
+		"strategy": "max-semver",
+		"packageJsonPaths": [
+			"packages/core/package.json",
+			"packages/ui/package.json",
+			"packages/utils/package.json"
+		]
+	}
+}
