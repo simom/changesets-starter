@@ -24,6 +24,9 @@ What `init` does:
 3. Installs `@changesets/cli` as a devDependency when missing
 4. Writes `docs/release.md` and `release-kit.config.json`
 5. Optionally copies `scripts/sync-version.mjs` when a sync strategy is selected
+6. Installs Cursor agent guidance: `.cursor/rules/changesets.mdc`, `.cursor/skills/changesets/SKILL.md`, and `AGENTS.md` (create or append)
+
+Cursor rule and skill files are written only when missing (never overwritten). `AGENTS.md` is never overwritten: if it already mentions changesets or has a `## Release and versioning` section, the init skips it; otherwise it creates the file or appends the release snippet.
 
 ## Profiles
 
@@ -91,7 +94,7 @@ See [`examples/`](examples/) for sample `release-kit.config.json` files.
 | `--root-from a,b,c` | Required for `max-semver` |
 | `--base-branch` | Changesets `baseBranch` (default: `main`) |
 | `--merge` | Do not overwrite existing config/docs; only fill gaps |
-| `--agents` | Append a short release note to existing `AGENTS.md` |
+| `--agents` | Deprecated no-op (agent guidance is always installed; kept for old scripts) |
 | `--dry-run` | Print actions without writing or installing |
 | `--help` | Show help |
 

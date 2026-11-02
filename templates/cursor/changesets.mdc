@@ -1,0 +1,6 @@
+---
+description: Require a Changeset for meaningful code changes in this repo
+alwaysApply: true
+---
+
+__AGENT_BODY__

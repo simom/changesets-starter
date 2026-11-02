@@ -41,7 +41,7 @@ Options:
   --root-from <a,b,c>       Package dirs or package.json paths for max-semver
   --base-branch <name>      Changesets baseBranch (default: main)
   --merge                   Skip overwriting existing config/docs; fill gaps only
-  --agents                  Append release snippet to AGENTS.md when present
+  --agents                  Deprecated (no-op); agent guidance is always installed
   --dry-run                 Print actions without writing or installing
   --help                    Show this help
 `);
@@ -283,6 +283,33 @@ function scanWorkspacePackages(cwd, dirName) {
 
 /**
  * @param {string} cwd
+ */
+function buildPackageMapTable(cwd) {
+	const rows = [
+		...scanWorkspacePackages(cwd, "packages"),
+		...scanWorkspacePackages(cwd, "apps"),
+	];
+
+	if (rows.length === 0) {
+		return [
+			"| Area touched | Package in changeset |",
+			"| --- | --- |",
+			"| `packages/core/**` | `@scope/core` |",
+			"| `packages/ui/**` | `@scope/ui` |",
+			"| Everything else (docs, scripts, root config) | pick a tooling package or the most relevant package |",
+		].join("\n");
+	}
+
+	return [
+		"| Area touched | Package in changeset |",
+		"| --- | --- |",
+		...rows.map((row) => `| \`${row.path}\` | \`${row.name}\` |`),
+		"| Everything else (docs, scripts, root config) | pick a tooling package or the most relevant package |",
+	].join("\n");
+}
+
+/**
+ * @param {string} cwd
  * @param {string} profile
  * @param {string} packageName
  */
@@ -299,31 +326,135 @@ function buildReleaseDoc(cwd, profile, packageName) {
 		join(kitRoot, "templates", "release.md.workspaces.md"),
 		"utf8",
 	);
-	const rows = [
-		...scanWorkspacePackages(cwd, "packages"),
-		...scanWorkspacePackages(cwd, "apps"),
-	];
+	return template.replace("PACKAGE_MAP_TABLE", buildPackageMapTable(cwd));
+}
 
-	let table;
-	if (rows.length === 0) {
-		table = [
-			"| Area touched | Package in changeset |",
-			"| --- | --- |",
-			"| `packages/core/**` | `@scope/core` |",
-			"| `packages/ui/**` | `@scope/ui` |",
-			"| Everything else (docs, scripts, root config) | pick a tooling package or the most relevant package |",
-		].join("\n");
-	} else {
-		const lines = [
-			"| Area touched | Package in changeset |",
-			"| --- | --- |",
-			...rows.map((row) => `| \`${row.path}\` | \`${row.name}\` |`),
-			"| Everything else (docs, scripts, root config) | pick a tooling package or the most relevant package |",
-		];
-		table = lines.join("\n");
+/**
+ * @param {string} cwd
+ * @param {string} profile
+ * @param {string} packageName
+ */
+function buildPackageContext(cwd, profile, packageName) {
+	const file =
+		profile === "single"
+			? "agent-package-context.single.md"
+			: "agent-package-context.workspaces.md";
+	const template = readFileSync(
+		join(kitRoot, "templates", "cursor", file),
+		"utf8",
+	);
+	if (profile === "single") {
+		return template.replaceAll("PACKAGE_NAME", packageName || "my-app");
+	}
+	return template.replace("PACKAGE_MAP_TABLE", buildPackageMapTable(cwd));
+}
+
+/**
+ * @param {string} cwd
+ * @param {string} profile
+ * @param {string} packageName
+ */
+function buildAgentInstructionBody(cwd, profile, packageName) {
+	const bodyTemplate = readFileSync(
+		join(kitRoot, "templates", "cursor", "agent-body.md"),
+		"utf8",
+	);
+	const packageContext = buildPackageContext(cwd, profile, packageName);
+	return bodyTemplate.replace("PACKAGE_CONTEXT", packageContext.trimEnd());
+}
+
+/**
+ * @param {string} cwd
+ * @param {string} profile
+ * @param {string} packageName
+ */
+function buildAgentBodies(cwd, profile, packageName) {
+	const instructionBody = buildAgentInstructionBody(
+		cwd,
+		profile,
+		packageName,
+	).trimEnd();
+	const ruleWrapper = readFileSync(
+		join(kitRoot, "templates", "cursor", "changesets.mdc"),
+		"utf8",
+	);
+	const skillWrapper = readFileSync(
+		join(kitRoot, "templates", "cursor", "changesets-skill", "SKILL.md"),
+		"utf8",
+	);
+	return {
+		rule: ruleWrapper.replace("__AGENT_BODY__", instructionBody),
+		skill: skillWrapper.replace("__AGENT_BODY__", instructionBody),
+	};
+}
+
+function loadAgentsSnippet() {
+	return readFileSync(
+		join(kitRoot, "templates", "agents-snippet.md"),
+		"utf8",
+	);
+}
+
+/**
+ * @param {string} content
+ */
+function agentsAlreadyHasChangesetsGuidance(content) {
+	if (content.toLowerCase().includes("changeset")) {
+		return true;
+	}
+	return content.includes("## Release and versioning");
+}
+
+/**
+ * @param {string} cwd
+ * @param {string} profile
+ * @param {string} packageName
+ * @param {boolean} dryRun
+ */
+function installCursorAgentGuidance(cwd, profile, packageName, dryRun) {
+	const { rule, skill } = buildAgentBodies(cwd, profile, packageName);
+	const rulePath = join(cwd, ".cursor", "rules", "changesets.mdc");
+	const skillPath = join(cwd, ".cursor", "skills", "changesets", "SKILL.md");
+	writeText(rulePath, rule.endsWith("\n") ? rule : `${rule}\n`, dryRun, true);
+	writeText(
+		skillPath,
+		skill.endsWith("\n") ? skill : `${skill}\n`,
+		dryRun,
+		true,
+	);
+}
+
+/**
+ * @param {string} cwd
+ * @param {boolean} dryRun
+ */
+function ensureAgentsGuidance(cwd, dryRun) {
+	const agentsPath = join(cwd, "AGENTS.md");
+	const snippet = `${loadAgentsSnippet().trimEnd()}\n`;
+
+	if (!existsSync(agentsPath)) {
+		if (dryRun) {
+			log(`(dry-run) would create ${agentsPath}`);
+			return;
+		}
+		writeFileSync(agentsPath, snippet);
+		log(`created ${agentsPath}`);
+		return;
 	}
 
-	return template.replace("PACKAGE_MAP_TABLE", table);
+	const current = readFileSync(agentsPath, "utf8");
+	if (agentsAlreadyHasChangesetsGuidance(current)) {
+		log("AGENTS.md already documents changesets; skipping");
+		return;
+	}
+
+	const next = `${current.trimEnd()}\n\n${snippet}`;
+	if (dryRun) {
+		log(`(dry-run) would append release snippet to ${agentsPath}`);
+		return;
+	}
+	writeFileSync(agentsPath, next);
+	log(`updated ${agentsPath}`);
 }
 
 /**
@@ -424,41 +555,6 @@ function ensureChangesetReadme(cwd, dryRun) {
 /**
  * @param {string} cwd
  * @param {boolean} dryRun
- * @param {boolean} forceAgents
- */
-function maybeAppendAgents(cwd, dryRun, forceAgents) {
-	const agentsPath = join(cwd, "AGENTS.md");
-	if (!existsSync(agentsPath)) {
-		if (forceAgents) {
-			log("AGENTS.md not found; skipping --agents");
-		}
-		return;
-	}
-	const current = readFileSync(agentsPath, "utf8");
-	if (current.toLowerCase().includes("changeset")) {
-		log("AGENTS.md already mentions changesets; skipping append");
-		return;
-	}
-	if (!forceAgents) {
-		log("AGENTS.md present; pass --agents to append the release snippet");
-		return;
-	}
-	const snippet = readFileSync(
-		join(kitRoot, "templates", "agents-snippet.md"),
-		"utf8",
-	);
-	const next = `${current.trimEnd()}\n\n${snippet.trimEnd()}\n`;
-	if (dryRun) {
-		log(`(dry-run) would append release snippet to ${agentsPath}`);
-		return;
-	}
-	writeFileSync(agentsPath, next);
-	log(`updated ${agentsPath}`);
-}
-
-/**
- * @param {string} cwd
- * @param {boolean} dryRun
  */
 function installChangesets(cwd, dryRun) {
 	if (dryRun) {
@@ -550,6 +646,13 @@ function main() {
 		merge,
 	);
 
+	installCursorAgentGuidance(cwd, profile, packageName, dryRun);
+	ensureAgentsGuidance(cwd, dryRun);
+
+	if (args.agents) {
+		log("--agents is deprecated; agent guidance is always installed");
+	}
+
 	const { pkg: nextPkg, needsInstall } = mergePackageScripts(
 		pkg,
 		String(args.sync),
@@ -569,8 +672,6 @@ function main() {
 	} else {
 		log(`${CHANGESETS_CLI} already listed in package.json`);
 	}
-
-	maybeAppendAgents(cwd, dryRun, Boolean(args.agents));
 
 	log("done");
 	if (!dryRun) {
